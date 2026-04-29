@@ -62,9 +62,9 @@ assets.md 记录四段完整 prompt + 精简版 + 可迁移项分析 + 补图记
 ## 参数模板（每段）
 
 ```
---prompt "{精简版 prompt，末尾附加参考映射声明}"
+--prompt "{精简版 prompt，正文中用内联 `图片N` 指代参考图用途}"
 
---ref-images（顺序必须与 prompt 中映射声明的图片编号一致）
+--ref-images（顺序必须与 prompt 中 `图片N` 编号一致）
   图片1: segN/frame01.jpg (定场构图和光影)
   图片2: segN/frame02.jpg (情绪高点构图和面部光照)
   图片3: {角色A}/front.jpg (角色A外观)
@@ -73,7 +73,7 @@ assets.md 记录四段完整 prompt + 精简版 + 可迁移项分析 + 补图记
   图片6: {角色B}/expressions/{emotion}.jpg (角色B当前情绪面部)
   [图片7-9: 补充参考图]
 
---audio（顺序必须与 prompt 中映射声明的音频编号一致）
+--audio（模型自动匹配人声，prompt 中无需显式声明音频用途）
   音频1: {角色A}/voice-ref.mp3
   音频2: {角色B}/voice-ref.mp3
 
@@ -117,9 +117,9 @@ ffmpeg -i ./05-videos/ep01/seg1.mp4 -ss {时间B} -vframes 1 \
 替换：图片3: seg1_best_face_A.jpg (角色A外观，段1最佳帧)
 ```
 
-参考映射声明同步更新：
+prompt 中内联指代同步更新：
 ```
-- 图片3：{角色A名}外观参考（段1最佳帧，替代设定图）
+角色形象参考`图片3`中的{角色A名}（段1最佳帧，替代设定图）。
 ```
 
 **跳过条件**（以下任一满足即可跳过）：

@@ -1,16 +1,16 @@
 # 苏晚宁 资产清单
 
 > 档位：A档·主角
-> 状态：四视图已完成，表情变体待生成
+> 状态：已完成（四视图 + 表情变体 + 音色参考）
 
 ## 角色设定图
 
 | 文件 | 来源 | 完整 Prompt | 命令参数 | 任务 ID | 备注 |
 |------|------|------------|---------|---------|------|
-| front.jpg | Seedream 文生图 | （上一会话生成，Prompt 待补录） | --size 9:16 | — | 正面全身，用户已确认 |
-| back.jpg | Seedream 图生图（引用 front.jpg） | （上一会话生成，Prompt 待补录） | -i front.jpg --size 9:16 | — | 背面全身 |
-| left.jpg | Seedream 图生图（引用 front.jpg） | （上一会话生成，Prompt 待补录） | -i front.jpg --size 9:16 | — | 左侧全身 |
-| right.jpg | Seedream 图生图（引用 front.jpg） | （上一会话生成，Prompt 待补录） | -i front.jpg --size 9:16 | — | 右侧全身 |
+| front.jpg | Seedream 文生图 | （已丢失） | --size 9:16 | （已丢失） | 正面全身，用户已确认 |
+| back.jpg | Seedream 图生图（引用 front.jpg） | （已丢失） | -i front.jpg --size 9:16 | （已丢失） | 背面全身 |
+| left.jpg | Seedream 图生图（引用 front.jpg） | （已丢失） | -i front.jpg --size 9:16 | （已丢失） | 左侧全身 |
+| right.jpg | Seedream 图生图（引用 front.jpg） | （已丢失） | -i front.jpg --size 9:16 | （已丢失） | 右侧全身 |
 
 ## 表情变体
 
