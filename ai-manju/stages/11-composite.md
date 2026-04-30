@@ -69,38 +69,51 @@ ffmpeg -i ./05-videos/ep01/seg3.mp4 \
 
 校正后的文件用于后续合成，原始文件保留不删除。
 
-### 步骤 2：交叉淡入淡出拼接（推荐）
+### 步骤 2：分步合成（推荐）
 
-4 段是独立 Seedance 任务，段间可能有微小视觉跳跃。每段首尾各截 0.3s，段间 0.5s crossfade：
+> ⚠️ **必须分步合成**。四段一次性用 concat + xfade 混合 filter_complex 会触发 FFmpeg timebase 不匹配错误（concat 输出的 timebase 与 xfade 输入不兼容）。分步两两拼接虽然多一次编码，但稳定可靠。
+
+按 `05-videos/ep{NN}/assets.md` 中的衔接规划表，逐步拼接。以下以"段1→段2 黑场fade，段2→段3 crossfade 0.3s，段3→段4 crossfade 0.5s"为例：
 
 ```bash
-ffmpeg -i ./05-videos/ep01/seg1.mp4 -i ./05-videos/ep01/seg2.mp4 \
-       -i ./05-videos/ep01/seg3.mp4 -i ./05-videos/ep01/seg4.mp4 \
-  -filter_complex \
-    "[0:v]trim=0:14.7,setpts=PTS-STARTPTS[v0]; \
-     [0:a]atrim=0:14.7,asetpts=PTS-STARTPTS[a0]; \
-     [1:v]trim=0.3:14.7,setpts=PTS-STARTPTS[v1]; \
-     [1:a]atrim=0.3:14.7,asetpts=PTS-STARTPTS[a1]; \
-     [2:v]trim=0.3:14.7,setpts=PTS-STARTPTS[v2]; \
-     [2:a]atrim=0.3:14.7,asetpts=PTS-STARTPTS[a2]; \
-     [3:v]trim=0.3:15,setpts=PTS-STARTPTS[v3]; \
-     [3:a]atrim=0.3:15,asetpts=PTS-STARTPTS[a3]; \
-     [v0][v1]xfade=transition=fade:duration=0.5:offset=14.5[v01]; \
-     [v01][v2]xfade=transition=fade:duration=0.5:offset=29.0[v012]; \
-     [v012][v3]xfade=transition=fade:duration=0.5:offset=43.5[vout]; \
-     [a0][a1]acrossfade=d=0.5:c1=nofade:c2=nofade[a01]; \
-     [a01][a2]acrossfade=d=0.5:c1=nofade:c2=nofade[a012]; \
-     [a012][a3]acrossfade=d=0.5:c1=nofade:c2=nofade[aout]" \
+# 步骤 2a：段1 + 段2（黑场 fade）
+ffmpeg -y \
+  -i ./05-videos/ep01/seg1.mp4 \
+  -i ./05-videos/ep01/seg2.mp4 \
+  -filter_complex "[0:v]fade=t=out:st=14.5:d=0.5[v0];[1:v]fade=t=in:st=0:d=0.5[v1];[v0][v1]concat=n=2:v=1:a=0[vout];[0:a][1:a]concat=n=2:v=0:a=1[aout]" \
   -map "[vout]" -map "[aout]" \
-  -c:v libx264 -preset medium -crf 18 \
+  -c:v libx264 -preset medium -crf 18 -c:a aac -b:a 192k \
+  ./05-videos/ep01/_tmp_seg12.mp4
+
+# 步骤 2b：(段1+段2) + 段3（crossfade 0.3s）
+# offset = 步骤2a输出时长 - crossfade时长（查 ffprobe 确认实际时长）
+ffmpeg -y \
+  -i ./05-videos/ep01/_tmp_seg12.mp4 \
+  -i ./05-videos/ep01/seg3.mp4 \
+  -filter_complex "[0:v][1:v]xfade=transition=fade:duration=0.3:offset={seg12时长-0.3}[vout];[0:a][1:a]acrossfade=d=0.3[aout]" \
+  -map "[vout]" -map "[aout]" \
+  -c:v libx264 -preset medium -crf 18 -c:a aac -b:a 192k \
+  ./05-videos/ep01/_tmp_seg123.mp4
+
+# 步骤 2c：(段1+段2+段3) + 段4（crossfade 0.5s）
+ffmpeg -y \
+  -i ./05-videos/ep01/_tmp_seg123.mp4 \
+  -i ./05-videos/ep01/seg4.mp4 \
+  -filter_complex "[0:v][1:v]xfade=transition=fade:duration=0.5:offset={seg123时长-0.5}[vout];[0:a][1:a]acrossfade=d=0.5[aout]" \
+  -map "[vout]" -map "[aout]" \
+  -c:v libx264 -preset medium -crf 18 -c:a aac -b:a 192k \
   ./06-output/ep01-final.mp4
+
+# 清理临时文件
+rm ./05-videos/ep01/_tmp_seg12.mp4 ./05-videos/ep01/_tmp_seg123.mp4
 ```
 
-> 每段首尾各截 0.3s，3 次 crossfade 过渡。总计损失 ~1.8s，成品约 58.2s。
+> 每步用 `ffprobe -v error -show_entries format=duration -of csv=p=0` 查中间文件时长，计算下一步的 offset。
+> 衔接方式（黑场fade/crossfade/硬切）和时长从 assets.md 衔接规划表读取，不同集可能不同。
 
-### 步骤 2：硬切拼接（备选）
+### 步骤 2（备选）：硬切拼接
 
-如果段间衔接本身很流畅：
+如果所有段间衔接都是硬切（极少见）：
 
 ```bash
 ffmpeg -i ./05-videos/ep01/seg1.mp4 -i ./05-videos/ep01/seg2.mp4 \
@@ -110,6 +123,33 @@ ffmpeg -i ./05-videos/ep01/seg1.mp4 -i ./05-videos/ep01/seg2.mp4 \
   -c:v libx264 -preset medium -crf 18 \
   ./06-output/ep01-final.mp4
 ```
+
+### 步骤 3：字幕错别字局部修复（🆕 按需执行）
+
+> ⚠️ Seedance 内置字幕偶尔会出现形近字替换（如"各→何"）。字幕指令保留在 prompt 中以保证语音同步，成片检查时发现错别字用 FFmpeg drawtext 局部覆盖修复。
+
+**修复流程**：
+
+1. 成片检查时记录错别字位置：哪一段、哪句台词、出现在成片的第几秒
+2. 用 FFmpeg drawtext 在错别字出现的时间段叠加正确文字覆盖
+
+```bash
+# 示例：成片 33-36 秒处"各走何路"→"各走各路"
+ffmpeg -y \
+  -i ./06-output/ep01-final.mp4 \
+  -vf "drawtext=text='各走各路':fontfile=/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc:fontsize=36:fontcolor=white:borderw=2:bordercolor=black:x=(w-text_w)/2:y=h-80:enable='between(t,33,36)'" \
+  -c:v libx264 -preset medium -crf 18 -c:a copy \
+  ./06-output/ep01-final-fixed.mp4
+
+# 确认修复后替换（遵循资产安全规则：先备份再替换）
+cp ./06-output/ep01-final.mp4 ./06-output/_backup/ep01-final.mp4.bak
+mv ./06-output/ep01-final-fixed.mp4 ./06-output/ep01-final.mp4
+```
+
+> 如果多处错别字，可以链式叠加多个 drawtext 滤镜，用逗号分隔。
+> 字体、字号、位置需要与 Seedance 原始字幕样式尽量匹配。
+
+**无错别字时跳过此步骤。**
 
 ## 产出
 

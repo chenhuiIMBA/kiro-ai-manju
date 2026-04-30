@@ -1,9 +1,9 @@
 # STATE — 七日恋人（test-drama）
 
-**当前阶段**: 07-video
+**当前阶段**: 13-batch
 **状态**: in_progress
-**最后更新**: 2026-04-29
-**当前集**: ep01
+**最后更新**: 2026-04-30
+**当前集**: ep02
 **总集数**: 20
 
 ---
@@ -16,9 +16,9 @@
 - [x] 04-character（5角色：2主角A档四视图+4表情+音色，3配角B档正面图+2表情+音色）
 - [x] 05-script（EP01 剧本已确认 + narrative-state 已更新）
 - [x] 06-storyboard（EP01 8帧已确认，seg3帧2修订v2）
-- [ ] 07-video（含原08-10，已合并）
-- [ ] 11-composite
-- [ ] 12-review
+- [x] 07-video（含原08-10，已合并）
+- [x] 11-composite
+- [x] 12-review
 - [ ] 13-batch
 
 ## 已完成的产出物
@@ -38,3 +38,7 @@
 - `04-human-design/xuruoqing/` — B档：正面图(v3修订) + 2表情（克制冷淡/疲惫卸防）+ voice-ref.mp3
 - `04-human-design/zhouyan/` — B档：正面图 + 2表情（温和微笑/冷笑）+ voice-ref.mp3
 - `03-storyboard/ep01/` — EP01 故事板（4段×2帧=8帧，seg3帧2为v2修订版）
+- `05-videos/ep01/seg1~4.mp4` — EP01 四段视频（Seedance 2.0，720p 9:16 15s）
+- `05-videos/ep01/lastframe_seg1~4.png` — 四段尾帧
+- `05-videos/ep01/assets.md` — 视频资产清单（prompt+衔接规划+内心独白+可迁移分析）
+- `06-output/ep01-final.mp4` — EP01 成片（59.5s，720p 9:16）
