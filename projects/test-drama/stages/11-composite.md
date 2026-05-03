@@ -1,32 +1,33 @@
 # 阶段 11：合成成片
 
-> 工具：FFmpeg（crossfade 拼接）
-> ⚠️ 4 段 → 3 次 crossfade
+> 工具：FFmpeg
+> ⚠️ **零裁切原则**：不截取原片任何内容。转场库详见 `references/workflow-detail.md` §8.1。
 
 ## 前置条件
 
-- `05-videos/ep01/seg1.mp4` + `seg2.mp4` + `seg3.mp4` + `seg4.mp4` 均已确认
+- `05-videos/ep{NN}/seg1.mp4` + `seg2.mp4` + `seg3.mp4` + `seg4.mp4` 均已确认
+- `05-videos/ep{NN}/assets.md` 中的段间衔接规划表已填写（含转场方式和情绪意图）
 
 ## 流程
 
-### 步骤 1：段间色温一致性检查（🆕 必做）
+### 步骤 1：段间色温一致性检查（必做）
 
-> ⚠️ 四段视频是独立 Seedance 任务，色温/亮度/对比度可能有差异。crossfade 能掩盖构图跳跃，但掩盖不了色温跳变——两段不同色温的画面叠化 = 灰泥色 0.5 秒。合成前必须先检查。
+> ⚠️ 四段视频是独立 Seedance 任务，色温/亮度/对比度可能有差异。转场能掩盖构图跳跃，但掩盖不了色温跳变。合成前必须先检查。
 
 截取每段首帧，横向拼接对比：
 
 ```bash
-# 截取每段首帧（跳过前 0.3s 不稳定区域）
-ffmpeg -i ./05-videos/ep01/seg1.mp4 -ss 0.5 -vframes 1 ./05-videos/ep01/seg1_first.jpg
-ffmpeg -i ./05-videos/ep01/seg2.mp4 -ss 0.5 -vframes 1 ./05-videos/ep01/seg2_first.jpg
-ffmpeg -i ./05-videos/ep01/seg3.mp4 -ss 0.5 -vframes 1 ./05-videos/ep01/seg3_first.jpg
-ffmpeg -i ./05-videos/ep01/seg4.mp4 -ss 0.5 -vframes 1 ./05-videos/ep01/seg4_first.jpg
+# 截取每段首帧（跳过前 0.5s 不稳定区域）
+ffmpeg -i ./05-videos/ep{NN}/seg1.mp4 -ss 0.5 -vframes 1 ./05-videos/ep{NN}/seg1_first.jpg
+ffmpeg -i ./05-videos/ep{NN}/seg2.mp4 -ss 0.5 -vframes 1 ./05-videos/ep{NN}/seg2_first.jpg
+ffmpeg -i ./05-videos/ep{NN}/seg3.mp4 -ss 0.5 -vframes 1 ./05-videos/ep{NN}/seg3_first.jpg
+ffmpeg -i ./05-videos/ep{NN}/seg4.mp4 -ss 0.5 -vframes 1 ./05-videos/ep{NN}/seg4_first.jpg
 
 # 横向拼接对比
-ffmpeg -i ./05-videos/ep01/seg1_first.jpg -i ./05-videos/ep01/seg2_first.jpg \
-       -i ./05-videos/ep01/seg3_first.jpg -i ./05-videos/ep01/seg4_first.jpg \
+ffmpeg -i ./05-videos/ep{NN}/seg1_first.jpg -i ./05-videos/ep{NN}/seg2_first.jpg \
+       -i ./05-videos/ep{NN}/seg3_first.jpg -i ./05-videos/ep{NN}/seg4_first.jpg \
   -filter_complex "[0][1][2][3]hstack=inputs=4" \
-  ./05-videos/ep01/color_comparison.jpg
+  ./05-videos/ep{NN}/color_comparison.jpg
 ```
 
 目测检查 `color_comparison.jpg`：
@@ -45,14 +46,14 @@ ffmpeg -i ./05-videos/ep01/seg1_first.jpg -i ./05-videos/ep01/seg2_first.jpg \
 
 ```bash
 # 示例：段2 偏冷，需要加暖
-ffmpeg -i ./05-videos/ep01/seg2.mp4 \
+ffmpeg -i ./05-videos/ep{NN}/seg2.mp4 \
   -vf "colorbalance=rs=0.05:gs=0.02:bs=-0.05" \
-  ./05-videos/ep01/seg2_corrected.mp4
+  ./05-videos/ep{NN}/seg2_corrected.mp4
 
 # 示例：段3 偏暗，需要提亮
-ffmpeg -i ./05-videos/ep01/seg3.mp4 \
+ffmpeg -i ./05-videos/ep{NN}/seg3.mp4 \
   -vf "eq=brightness=0.03:contrast=1.02" \
-  ./05-videos/ep01/seg3_corrected.mp4
+  ./05-videos/ep{NN}/seg3_corrected.mp4
 ```
 
 常用校正参数：
@@ -69,59 +70,98 @@ ffmpeg -i ./05-videos/ep01/seg3.mp4 \
 
 校正后的文件用于后续合成，原始文件保留不删除。
 
-### 步骤 2：交叉淡入淡出拼接（推荐）
+### 步骤 2：按衔接规划表合成
 
-4 段是独立 Seedance 任务，段间可能有微小视觉跳跃。每段首尾各截 0.3s，段间 0.5s crossfade：
+从 `05-videos/ep{NN}/assets.md` 读取段间衔接规划表，根据转场方式选择合成方案。
 
-```bash
-ffmpeg -i ./05-videos/ep01/seg1.mp4 -i ./05-videos/ep01/seg2.mp4 \
-       -i ./05-videos/ep01/seg3.mp4 -i ./05-videos/ep01/seg4.mp4 \
-  -filter_complex \
-    "[0:v]trim=0:14.7,setpts=PTS-STARTPTS[v0]; \
-     [0:a]atrim=0:14.7,asetpts=PTS-STARTPTS[a0]; \
-     [1:v]trim=0.3:14.7,setpts=PTS-STARTPTS[v1]; \
-     [1:a]atrim=0.3:14.7,asetpts=PTS-STARTPTS[a1]; \
-     [2:v]trim=0.3:14.7,setpts=PTS-STARTPTS[v2]; \
-     [2:a]atrim=0.3:14.7,asetpts=PTS-STARTPTS[a2]; \
-     [3:v]trim=0.3:15,setpts=PTS-STARTPTS[v3]; \
-     [3:a]atrim=0.3:15,asetpts=PTS-STARTPTS[a3]; \
-     [v0][v1]xfade=transition=fade:duration=0.5:offset=14.5[v01]; \
-     [v01][v2]xfade=transition=fade:duration=0.5:offset=29.0[v012]; \
-     [v012][v3]xfade=transition=fade:duration=0.5:offset=43.5[vout]; \
-     [a0][a1]acrossfade=d=0.5:c1=nofade:c2=nofade[a01]; \
-     [a01][a2]acrossfade=d=0.5:c1=nofade:c2=nofade[a012]; \
-     [a012][a3]acrossfade=d=0.5:c1=nofade:c2=nofade[aout]" \
-  -map "[vout]" -map "[aout]" \
-  -c:v libx264 -preset medium -crf 18 \
-  ./06-output/ep01-final.mp4
-```
+#### 方案 A：纯硬切 + 黑场插入（concat demuxer）
 
-> 每段首尾各截 0.3s，3 次 crossfade 过渡。总计损失 ~1.8s，成品约 58.2s。
-
-### 步骤 2：硬切拼接（备选）
-
-如果段间衔接本身很流畅：
+适用于衔接方式只有硬切和黑场的情况。原片不裁切。
 
 ```bash
-ffmpeg -i ./05-videos/ep01/seg1.mp4 -i ./05-videos/ep01/seg2.mp4 \
-       -i ./05-videos/ep01/seg3.mp4 -i ./05-videos/ep01/seg4.mp4 \
-  -filter_complex "[0:v][0:a][1:v][1:a][2:v][2:a][3:v][3:a]concat=n=4:v=1:a=1[outv][outa]" \
-  -map "[outv]" -map "[outa]" \
+# 生成黑场（按需，匹配源视频参数）
+ffmpeg -f lavfi -i "color=c=black:s=720x1280:r=24:d=0.5" \
+       -f lavfi -i "anullsrc=r=44100:cl=stereo" \
+       -t 0.5 -c:v libx264 -c:a aac -shortest black_0.5s.mp4
+
+# 创建 concat 列表（原片不裁切）
+echo "file 'seg1.mp4'" > concat.txt
+echo "file 'seg2.mp4'" >> concat.txt
+echo "file 'black_0.5s.mp4'" >> concat.txt
+echo "file 'seg3.mp4'" >> concat.txt
+echo "file 'seg4.mp4'" >> concat.txt
+
+ffmpeg -f concat -safe 0 -i concat.txt \
   -c:v libx264 -preset medium -crf 18 \
-  ./06-output/ep01-final.mp4
+  -c:a aac -b:a 128k \
+  ./06-output/ep{NN}-final.mp4
 ```
+
+#### 方案 B：xfade 转场（filter_complex）
+
+适用于衔接方式包含 fade/fadewhite/fadeblack/circleclose 等 xfade 转场的情况。原片不裁切。
+
+```bash
+# 示例：seg1→seg2 硬切，seg2→seg3 fadewhite 0.3s，seg3→seg4 fadeblack 0.5s
+ffmpeg -i seg1.mp4 -i seg2.mp4 -i seg3.mp4 -i seg4.mp4 \
+  -filter_complex "
+    [0:v][1:v]concat=n=2:v=1:a=0[v01];
+    [0:a][1:a]concat=n=2:v=0:a=1[a01];
+    [v01][2:v]xfade=transition=fadewhite:duration=0.3:offset=29.7[v012];
+    [a01][2:a]acrossfade=d=0.3[a012];
+    [v012][3:v]xfade=transition=fadeblack:duration=0.5:offset=44.2[vout];
+    [a012][3:a]acrossfade=d=0.5[aout]
+  " -map "[vout]" -map "[aout]" \
+  -c:v libx264 -preset medium -crf 18 \
+  -c:a aac -b:a 128k \
+  ./06-output/ep{NN}-final.mp4
+```
+
+> ⚠️ **offset 计算**：`offset = 前面所有段的累计时长 - 前面所有 xfade 转场的累计时长 - 当前转场时长`。硬切和黑场插入不消耗 offset。
+>
+> 💡 如果一集中既有硬切/黑场又有 xfade 转场，统一用 filter_complex 方案（方案 B）。
+
+#### 闪烁帧处理（仅在发现问题时执行）
+
+大部分情况下 Seedance 首尾帧是正常的，不需要处理。如果合成后发现某个衔接点有明显闪烁：
+
+```bash
+# 对段尾 0.1s 做 fade-out（不截内容，仅柔化最后几帧）
+ffmpeg -i seg1.mp4 -vf "fade=t=out:st=14.9:d=0.1" -c:a copy seg1_faded.mp4
+# 对段头 0.1s 做 fade-in
+ffmpeg -i seg2.mp4 -vf "fade=t=in:st=0:d=0.1" -c:a copy seg2_faded.mp4
+```
+
+### 转场库速查
+
+| 转场 | FFmpeg 参数 | 适用场景 |
+|------|------------|---------|
+| 硬切 | `concat` | 同场景连续叙事 |
+| 淡入淡出 | `xfade=transition=fade` | 时间流逝、情绪缓冲 |
+| 渐黑 | `xfade=transition=fadeblack` | 场景大跳跃、色温变化大 |
+| 渐白 | `xfade=transition=fadewhite` | 婚礼/梦境、仪式感升级 |
+| 柔滑左移 | `xfade=transition=smoothleft` | 进入回忆/闪回 |
+| 柔滑右移 | `xfade=transition=smoothright` | 从回忆回到现实 |
+| 向下擦除 | `xfade=transition=wipedown` | 竖屏空间跳转 |
+| 向上擦除 | `xfade=transition=wipeup` | 情绪上升、空间提升 |
+| 左滑 | `xfade=transition=slideleft` | 平行叙事 |
+| 圆形收缩 | `xfade=transition=circleclose` | 聚焦关键物体、回忆结束 |
+| 圆形展开 | `xfade=transition=circleopen` | 新场景揭示、回忆开始 |
+| 径向擦除 | `xfade=transition=radial` | 时间流逝视觉隐喻 |
 
 ## 产出
 
 | 文件 | 说明 |
 |------|------|
-| `06-output/ep01-final.mp4` | 第 1 集成品（~60s） |
+| `06-output/ep{NN}-final.mp4` | 第 N 集成品（~60s） |
 
 ## 验收
 
-- [ ] 段间色温一致性检查已执行（color_comparison.jpg 已生成并目测通过）（🆕）
-- [ ] 如有色彩校正，校正后重新对比确认通过（🆕）
-- [ ] 3 处段间拼接无明显视觉跳跃
+- [ ] 段间色温一致性检查已执行（color_comparison.jpg 已生成并目测通过）
+- [ ] 如有色彩校正，校正后重新对比确认通过
+- [ ] 原片内容完整保留（零裁切）
+- [ ] 段间转场方式与 assets.md 衔接规划表一致
+- [ ] 3 处段间拼接无明显视觉跳跃或闪烁
 - [ ] 音频无断裂或音量突变
 - [ ] 总时长约 60s
 

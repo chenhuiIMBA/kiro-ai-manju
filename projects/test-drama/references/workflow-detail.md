@@ -616,7 +616,19 @@ python3 <video-gen>/scripts/seedream.py create \
 - [ ] 每帧光影符合 `lighting-philosophy.md`（主光方向、光比、色温在灯光母题框架内）
 - [ ] 相邻帧景别或视角有明显差异（AI 适配：不依赖精确角度数值，通过景别/视角/构图的明显变化避免跳切感。Seedance 仅做帧间平滑，不负责精确角度跳变）
 
-**故事板不通过审核，不进视频生成阶段。**
+**故事板不通过人工审核，不进视频生成阶段。**
+
+### 6.4.1 故事板人工审核流程（🆕 强制）
+
+故事板关键帧生成后，必须提交用户逐帧审核：
+
+1. 将所有帧（每段 2 帧，共 8 帧）连同 assets.md 中的 prompt 和审核要点一起发给用户
+2. 用户逐帧确认：构图、角色外观、光影、景别、关键细节（如戒指位置、手指数量、服装）
+3. 用户标记需要修改的帧，说明问题
+4. AI 重新生成问题帧（备份旧版），再次提交审核
+5. 全部帧通过后，用户明确确认"故事板通过"，才能进入视频生成阶段
+
+> ⚠️ 故事板帧是视频生成的 ref-images 基础。帧中的错误（戒指位置、手指数量、服装不一致）会直接传导到视频中，修复成本远高于在故事板阶段拦截。
 
 ### 6.5 故事板灯光核查
 
@@ -762,54 +774,86 @@ python3 <video-gen>/scripts/seedance.py wait <task_id> --download ./videos/ep01/
 
 ## 阶段八：合成
 
-> 🎬 4 段是独立的 Seedance 任务，不使用 `first_frame` role（多模态模式下 role 互斥）。段间可能存在微小的视觉跳跃。使用 crossfade 过渡消除衔接痕迹。
+> 🎬 4 段是独立的 Seedance 任务，不使用 `first_frame` role（多模态模式下 role 互斥）。段间可能存在微小的视觉跳跃。使用混合转场策略最大化保留内容。
 
 ### 8.0 段间色温一致性检查（🆕 必做）
 
 合成前截取每段首帧横向拼接对比，目测色温/亮度/肤色是否一致。差异明显时用 `colorbalance` 或 `eq` 滤镜轻微校正（以段 1 为基准）。详见 `stages/11-composite.md` 步骤 1。
 
-### 8.1 FFmpeg 交叉淡入淡出（推荐）
+### 8.1 混合转场策略（推荐）
 
-每段各截掉衔接处 0.3s，用 0.5s crossfade 过渡：
+根据段间衔接规划表，逐个衔接点选择最合适的转场方式。核心原则：**最大化保留内容，最小化裁切**。
 
-```bash
-# 4 段 crossfade 拼接（3 次渐变）
-ffmpeg -i ./videos/ep01/seg1.mp4 -i ./videos/ep01/seg2.mp4 \
-       -i ./videos/ep01/seg3.mp4 -i ./videos/ep01/seg4.mp4 \
-  -filter_complex \
-    "[0:v]trim=0:14.7,setpts=PTS-STARTPTS[v0]; \
-     [0:a]atrim=0:14.7,asetpts=PTS-STARTPTS[a0]; \
-     [1:v]trim=0.3:14.7,setpts=PTS-STARTPTS[v1]; \
-     [1:a]atrim=0.3:14.7,asetpts=PTS-STARTPTS[a1]; \
-     [2:v]trim=0.3:14.7,setpts=PTS-STARTPTS[v2]; \
-     [2:a]atrim=0.3:14.7,asetpts=PTS-STARTPTS[a2]; \
-     [3:v]trim=0.3:15,setpts=PTS-STARTPTS[v3]; \
-     [3:a]atrim=0.3:15,asetpts=PTS-STARTPTS[a3]; \
-     [v0][v1]xfade=transition=fade:duration=0.5:offset=14.5[v01]; \
-     [v01][v2]xfade=transition=fade:duration=0.5:offset=29.0[v012]; \
-     [v012][v3]xfade=transition=fade:duration=0.5:offset=43.5[vout]; \
-     [a0][a1]acrossfade=d=0.5:c1=nofade:c2=nofade[a01]; \
-     [a01][a2]acrossfade=d=0.5:c1=nofade:c2=nofade[a012]; \
-     [a012][a3]acrossfade=d=0.5:c1=nofade:c2=nofade[aout]" \
-  -map "[vout]" -map "[aout]" \
-  -c:v libx264 -preset medium -crf 18 \
-  ./output/ep01-final.mp4
-```
+#### 转场类型选择规则
 
-> 每段首尾各截 0.3s（避免尾帧固定画面突兀+不稳定首帧），段间 0.5s crossfade。总计 3 次渐变，损失 ~1.8s，60s 成片缩短为 ~58.2s——对漫剧体验无感知影响。
+| 衔接类型 | 转场方式 | 裁切 | 说明 |
+|---------|---------|------|------|
+| 同场景连续叙事 | 硬切 或 0.2s crossfade | 仅截首尾 0.1s 防闪烁 | 段间画面连续，不需要过渡 |
+| 场景跳转（同色温） | 0.3s crossfade | 仅截首尾 0.1s | 空间变化但色温相近 |
+| 场景跳转（色温变化大） | 插入 0.5s 黑场 | 仅截首尾 0.1s | 黑场是额外插入的帧，不截原片内容 |
+| 时间大跳跃（白天→夜晚等） | 插入 0.8-1s 黑场 | 仅截首尾 0.1s | 更长的黑场暗示时间流逝 |
 
-### 8.2 硬切拼接（备选）
+#### 裁切规则
 
-如果段间衔接本身很流畅，直接用 concat：
+- 每段仅截首尾各 0.1s（约 2-3 帧），防止 Seedance 首尾帧闪烁
+- seg1 不截头，seg4 不截尾
+- 总裁切损失约 0.6s（远小于旧方案的 1.8s）
+
+#### 黑场插入方式
+
+黑场是额外生成的纯黑视频+静音音频，插入到两段之间，不截原片内容：
 
 ```bash
-ffmpeg -i ./videos/ep01/seg1.mp4 -i ./videos/ep01/seg2.mp4 \
-       -i ./videos/ep01/seg3.mp4 -i ./videos/ep01/seg4.mp4 \
-  -filter_complex "[0:v][0:a][1:v][1:a][2:v][2:a][3:v][3:a]concat=n=4:v=1:a=1[outv][outa]" \
-  -map "[outv]" -map "[outa]" \
-  -c:v libx264 -preset medium -crf 18 \
-  ./output/ep01-final.mp4
+# 生成 0.5s 黑场（匹配源视频参数）
+ffmpeg -f lavfi -i "color=c=black:s=720x1280:r=24:d=0.5" \
+       -f lavfi -i "anullsrc=r=44100:cl=stereo" \
+       -t 0.5 -c:v libx264 -c:a aac -shortest black_0.5s.mp4
 ```
+
+#### 合成命令模板（混合转场）
+
+根据每集的衔接规划表组装 FFmpeg 命令。以下为示例（seg1→seg2 黑场，seg2→seg3 硬切，seg3→seg4 黑场）：
+
+```bash
+# 步骤 1：每段截首尾 0.1s
+ffmpeg -i seg1.mp4 -ss 0 -t 14.9 -c copy seg1_trimmed.mp4
+ffmpeg -i seg2.mp4 -ss 0.1 -t 14.8 -c copy seg2_trimmed.mp4
+ffmpeg -i seg3.mp4 -ss 0.1 -t 14.8 -c copy seg3_trimmed.mp4
+ffmpeg -i seg4.mp4 -ss 0.1 -c copy seg4_trimmed.mp4
+
+# 步骤 2：生成黑场
+ffmpeg -f lavfi -i "color=c=black:s=720x1280:r=24:d=0.5" \
+       -f lavfi -i "anullsrc=r=44100:cl=stereo" \
+       -t 0.5 -c:v libx264 -c:a aac -shortest black.mp4
+
+# 步骤 3：按衔接规划拼接
+# 创建 concat 列表文件
+echo "file 'seg1_trimmed.mp4'" > concat.txt
+echo "file 'black.mp4'" >> concat.txt       # seg1→seg2 黑场
+echo "file 'seg2_trimmed.mp4'" >> concat.txt
+echo "file 'seg3_trimmed.mp4'" >> concat.txt  # seg2→seg3 硬切（无黑场）
+echo "file 'black.mp4'" >> concat.txt       # seg3→seg4 黑场
+echo "file 'seg4_trimmed.mp4'" >> concat.txt
+
+ffmpeg -f concat -safe 0 -i concat.txt \
+  -c:v libx264 -preset medium -crf 18 \
+  -c:a aac -b:a 128k \
+  output/epXX-final.mp4
+```
+
+> ⚠️ concat demuxer 要求所有输入文件的编码参数一致（分辨率、帧率、音频采样率）。Seedance 输出的 4 段通常参数一致。黑场用相同参数生成。如果 concat 报错，改用 filter_complex 方案。
+
+#### crossfade 衔接（同场景连续时使用）
+
+```bash
+# 两段之间 0.2s crossfade（仅用于同场景连续叙事的衔接点）
+[vA][vB]xfade=transition=fade:duration=0.2:offset={A段时长-0.2}[vAB];
+[aA][aB]acrossfade=d=0.2:c1=nofade:c2=nofade[aAB];
+```
+
+### 8.2 旧方案：统一 crossfade（已弃用）
+
+> 旧方案每段首尾各截 0.3s + 0.5s crossfade，总损失约 3.3s 内容。已替换为混合转场策略。
 
 ---
 

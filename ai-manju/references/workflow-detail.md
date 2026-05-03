@@ -556,8 +556,10 @@ A面(25s) → 切换 → B面(25s) → 并置揭示(10s)
 - ❌ 禁止两个角色说话风格雷同
 
 **镜头层面**
-- ✅ 标注镜头序列（景别变化节奏）
+- ✅ 标注镜头序列（景别变化节奏），用 `→[运镜类型]` 标注连接方式（推镜/拉镜/摇镜/跟镜），无标注的 `→` 默认为切镜
+- ✅ 同一空间内的景别变化优先用连续运镜，减少段内切镜次数（参考 prompt-guide.md §七 运镜优先规则）
 - ❌ 禁止全程同一景别
+- ❌ 禁止同一段内超过 2 次切镜（每次切镜都是出错点，运镜能替代的不切）
 
 ### 5.4 拆解分镜
 
@@ -616,7 +618,19 @@ python3 <video-gen>/scripts/seedream.py create \
 - [ ] 每帧光影符合 `lighting-philosophy.md`（主光方向、光比、色温在灯光母题框架内）
 - [ ] 相邻帧景别或视角有明显差异（AI 适配：不依赖精确角度数值，通过景别/视角/构图的明显变化避免跳切感。Seedance 仅做帧间平滑，不负责精确角度跳变）
 
-**故事板不通过审核，不进视频生成阶段。**
+**故事板不通过人工审核，不进视频生成阶段。**
+
+### 6.4.1 故事板人工审核流程（🆕 强制）
+
+故事板关键帧生成后，必须提交用户逐帧审核：
+
+1. 将所有帧（每段 2 帧，共 8 帧）连同 assets.md 中的 prompt 和审核要点一起发给用户
+2. 用户逐帧确认：构图、角色外观、光影、景别、关键细节（如戒指位置、手指数量、服装）
+3. 用户标记需要修改的帧，说明问题
+4. AI 重新生成问题帧（备份旧版），再次提交审核
+5. 全部帧通过后，用户明确确认"故事板通过"，才能进入视频生成阶段
+
+> ⚠️ 故事板帧是视频生成的 ref-images 基础。帧中的错误（戒指位置、手指数量、服装不一致）会直接传导到视频中，修复成本远高于在故事板阶段拦截。
 
 ### 6.5 故事板灯光核查
 
@@ -736,6 +750,33 @@ python3 <video-gen>/scripts/seedance.py wait <task_id> --download ./videos/ep01/
 - ⚠️ **角色图 vs 场景光矛盾**：角色设定图是均匀柔光，故事板帧可能是硬侧光。Seedance 在两者间可能折中导致场景光被削弱。如果视频中角色面部光影过平，下个任务用故事板帧的光影条件生成角色匹配变体（见 §4.3.5）。
 - ⚠️ **段 1 正式不使用 `--image`（首帧 role）**：多模态参考模式下 role 互斥。故事板首帧以 `reference_image` 传入 `--ref-images`，不单独作为 `first_frame`。
 
+### 7.3.1 seed 策略
+
+> seed 控制生成的随机性方向。相同请求 + 相同 seed → 生成**类似**（非完全相同）的结果。
+
+| 场景 | seed 值 | 理由 |
+|------|---------|------|
+| 首次生成 | 不传（默认 -1，随机） | 让模型自由发挥 |
+| 重新生成（修 prompt） | 传上一次的 seed | 锚定"好方向"，只改 prompt 中的问题部分 |
+| 重新生成（碰运气） | 不传（默认 -1） | 上一次整体不行，换个随机方向 |
+| A/B 测试 prompt | 固定同一个 seed | 控制变量，对比 prompt 差异 |
+
+**seed 记录规则**：
+- 每段视频生成后，从任务响应中提取 seed 值，记录到 assets.md 的段级进度追踪表
+- 查询已完成任务的 seed：`python3 <video-gen>/scripts/seedance.py status <task_id>`（响应中有 `seed` 字段）
+- 重新生成时传入 seed：`--seed <值>`
+
+**段级进度追踪表格式**（assets.md 中使用）：
+
+```markdown
+| 段 | 状态 | task_id | seed | 备注 |
+|----|------|---------|------|------|
+| seg1 | completed | cgt-xxx | 123456 | seg1.mp4 + lastframe_seg1.png |
+| seg2 | completed | cgt-yyy | 789012 | seg2.mp4 + lastframe_seg2.png |
+| seg3 | completed | cgt-zzz | 345678 | seg3.mp4（v2，seed复用） |
+| seg4 | pending | — | — | |
+```
+
 ### 7.4 用户确认
 
 四段 prompt + 衔接规划 + 完整参数一次性发给用户审核。确认后进入串行提交。
@@ -744,13 +785,18 @@ python3 <video-gen>/scripts/seedance.py wait <task_id> --download ./videos/ep01/
 
 段间不是"画面连续"而是"时间过渡"——尾帧只在同一场景连续叙事时传入下一段。
 
-| 衔接 | 条件 | 方式 | 尾帧传入下一段？ |
-|------|------|------|-----------------|
-| 黑场fade | 色温/场景大跳 | `fade=t=out:st=14.5:d=0.5` + `fade=t=in:st=0:d=0.5` | ❌ 不需要 |
-| crossfade | 色温相近、不同空间 | `xfade=transition=fade` | ❌ 不需要 |
-| 硬切 | 同一场景连续叙事 | `concat` | ✅ 传尾帧 |
+| 衔接 | 条件 | 推荐转场 | 尾帧传入下一段？ |
+|------|------|---------|-----------------|
+| 同场景连续叙事 | 画面连续 | 硬切 或 fade 0.2s | ✅ 传尾帧 |
+| 场景跳转（同色温） | 空间变化但色温相近 | fade 0.3s / wipedown 0.3s | ❌ 不需要 |
+| 场景跳转（色温变化大） | 色温/场景大跳 | fadeblack 0.5s | ❌ 不需要 |
+| 仪式感/婚礼过渡 | 明亮场景间过渡 | fadewhite 0.3-0.5s | ❌ 不需要 |
+| 进入回忆/闪回 | 时间线跳转 | smoothleft 0.4s / circleclose 0.4s | ❌ 不需要 |
+| 聚焦关键物体后切场景 | 视觉强调 | circleclose 0.3s | ❌ 不需要 |
 
-> `--return-last-frame true` 每段都传，尾帧全部下载到本地供 FFmpeg 合成前人工检查衔接。尾帧不自动传入下一段 `--ref-images`（除非判断需要）。
+> 完整转场库见 `references/workflow-detail.md` §8.1。
+>
+> `--return-last-frame true` 每段都传，尾帧全部下载到本地供合成前检查衔接。尾帧不自动传入下一段 `--ref-images`（除非判断需要）。
 
 ### 7.6 串行提交
 
@@ -762,54 +808,152 @@ python3 <video-gen>/scripts/seedance.py wait <task_id> --download ./videos/ep01/
 
 ## 阶段八：合成
 
-> 🎬 4 段是独立的 Seedance 任务，不使用 `first_frame` role（多模态模式下 role 互斥）。段间可能存在微小的视觉跳跃。使用 crossfade 过渡消除衔接痕迹。
+> 🎬 4 段是独立的 Seedance 任务，不使用 `first_frame` role（多模态模式下 role 互斥）。段间可能存在微小的视觉跳跃。使用混合转场策略处理衔接。
+>
+> ⚠️ **零裁切原则**：不截取原片任何内容。Seedance 生成的每一帧都完整保留。闪烁问题通过转场效果自然遮盖，不通过裁切解决。
 
-### 8.0 段间色温一致性检查（🆕 必做）
+### 8.0 段间色温一致性检查（必做）
 
 合成前截取每段首帧横向拼接对比，目测色温/亮度/肤色是否一致。差异明显时用 `colorbalance` 或 `eq` 滤镜轻微校正（以段 1 为基准）。详见 `stages/11-composite.md` 步骤 1。
 
-### 8.1 FFmpeg 交叉淡入淡出（推荐）
+### 8.1 混合转场策略
 
-每段各截掉衔接处 0.3s，用 0.5s crossfade 过渡：
+根据段间衔接规划表，逐个衔接点选择最合适的转场方式。核心原则：**零裁切，完整保留所有原片内容**。
+
+#### 转场库
+
+按叙事功能分为四类，共 12 种可用转场。每集衔接规划时从中选取。
+
+**基础类（日常衔接）**
+
+| 转场 | FFmpeg 参数 | 效果 | 适用场景 |
+|------|------------|------|---------|
+| 硬切 | `concat`（直接拼接） | 无过渡，直接切换 | 同场景连续叙事、快节奏对话 |
+| 淡入淡出 | `xfade=transition=fade` | 经典叠化 | 时间流逝、情绪缓冲、不同空间同色温 |
+
+**情绪过渡类（场景/情绪跳转）**
+
+| 转场 | FFmpeg 参数 | 效果 | 适用场景 |
+|------|------------|------|---------|
+| 渐黑 | `xfade=transition=fadeblack` | 先暗再出下一段 | 场景大跳跃、色温变化大、时间跳跃 |
+| 渐白 | `xfade=transition=fadewhite` | 先亮再出下一段 | 婚礼/梦境/回忆的明亮过渡、仪式感升级 |
+| 柔滑左移 | `xfade=transition=smoothleft` | 画面柔和向左滑动 | 回忆、闪回、进入角色内心 |
+| 柔滑右移 | `xfade=transition=smoothright` | 画面柔和向右滑动 | 从回忆回到现实 |
+
+**空间跳转类（物理空间变化）**
+
+| 转场 | FFmpeg 参数 | 效果 | 适用场景 |
+|------|------------|------|---------|
+| 向下擦除 | `xfade=transition=wipedown` | 新画面从上往下推入 | 竖屏 9:16 中自然的空间跳转 |
+| 向上擦除 | `xfade=transition=wipeup` | 新画面从下往上推入 | 情绪上升、空间提升 |
+| 左滑 | `xfade=transition=slideleft` | 整个画面向左滑走 | 平行叙事、同一时间不同空间 |
+
+**戏剧性类（风格化/强调）**
+
+| 转场 | FFmpeg 参数 | 效果 | 适用场景 |
+|------|------------|------|---------|
+| 圆形收缩 | `xfade=transition=circleclose` | 画面从四周向中心收缩成圆 | 聚焦关键物体（戒指、眼神）、回忆结束 |
+| 圆形展开 | `xfade=transition=circleopen` | 画面从中心圆形展开 | 新场景揭示、回忆开始 |
+| 径向擦除 | `xfade=transition=radial` | 时钟式擦除 | 时间流逝的视觉隐喻 |
+
+#### 转场选择规则
+
+| 衔接类型 | 推荐转场 | 时长 | 说明 |
+|---------|---------|------|------|
+| 同场景连续叙事 | 硬切 或 fade 0.2s | 0-0.2s | 画面连续，不需要过渡 |
+| 场景跳转（同色温） | fade 0.3s | 0.3s | 空间变化但色温相近 |
+| 场景跳转（色温变化大） | fadeblack 0.5s | 0.5s | 黑场自然隔离不同色温 |
+| 时间大跳跃（白天→夜晚等） | fadeblack 0.8s | 0.8s | 更长的黑场暗示时间流逝 |
+| 仪式感/婚礼场景过渡 | fadewhite 0.3-0.5s | 0.3-0.5s | 白色过渡符合婚礼明亮基调 |
+| 进入回忆/闪回 | smoothleft 0.4s 或 circleclose 0.4s | 0.4s | 柔化过渡暗示进入内心 |
+| 从回忆回到现实 | smoothright 0.4s 或 circleopen 0.4s | 0.4s | 与进入回忆对称 |
+| 聚焦关键物体后切场景 | circleclose 0.3s | 0.3s | 视觉聚焦+场景切换 |
+| 竖屏空间跳转 | wipedown 0.3s | 0.3s | 9:16 竖屏中最自然的擦除方向 |
+
+#### 闪烁帧处理
+
+> ⚠️ 不通过裁切处理闪烁。Seedance 首尾帧偶尔有 1-2 帧闪烁（约 0.04-0.08s），处理方式：
+> - **有转场的衔接点**：转场效果自然遮盖闪烁帧，无需额外处理
+> - **硬切衔接点**：如果首尾帧确实有明显闪烁，对该段首/尾 0.1s 做 fade-in/fade-out 柔化处理（不截内容）：
+>   ```bash
+>   # 对段尾 0.1s 做 fade-out（不截内容，仅柔化最后几帧）
+>   ffmpeg -i seg1.mp4 -vf "fade=t=out:st=14.9:d=0.1" -c:a copy seg1_faded.mp4
+>   # 对段头 0.1s 做 fade-in
+>   ffmpeg -i seg2.mp4 -vf "fade=t=in:st=0:d=0.1" -c:a copy seg2_faded.mp4
+>   ```
+> - **大部分情况下 Seedance 首尾帧是正常的**，不需要任何处理。先直接拼接，发现闪烁再针对性处理。
+
+#### 合成命令模板
+
+**方案 A：硬切 + 黑场插入（concat demuxer，简单场景）**
+
+适用于衔接方式只有硬切和黑场的情况：
 
 ```bash
-# 4 段 crossfade 拼接（3 次渐变）
-ffmpeg -i ./videos/ep01/seg1.mp4 -i ./videos/ep01/seg2.mp4 \
-       -i ./videos/ep01/seg3.mp4 -i ./videos/ep01/seg4.mp4 \
-  -filter_complex \
-    "[0:v]trim=0:14.7,setpts=PTS-STARTPTS[v0]; \
-     [0:a]atrim=0:14.7,asetpts=PTS-STARTPTS[a0]; \
-     [1:v]trim=0.3:14.7,setpts=PTS-STARTPTS[v1]; \
-     [1:a]atrim=0.3:14.7,asetpts=PTS-STARTPTS[a1]; \
-     [2:v]trim=0.3:14.7,setpts=PTS-STARTPTS[v2]; \
-     [2:a]atrim=0.3:14.7,asetpts=PTS-STARTPTS[a2]; \
-     [3:v]trim=0.3:15,setpts=PTS-STARTPTS[v3]; \
-     [3:a]atrim=0.3:15,asetpts=PTS-STARTPTS[a3]; \
-     [v0][v1]xfade=transition=fade:duration=0.5:offset=14.5[v01]; \
-     [v01][v2]xfade=transition=fade:duration=0.5:offset=29.0[v012]; \
-     [v012][v3]xfade=transition=fade:duration=0.5:offset=43.5[vout]; \
-     [a0][a1]acrossfade=d=0.5:c1=nofade:c2=nofade[a01]; \
-     [a01][a2]acrossfade=d=0.5:c1=nofade:c2=nofade[a012]; \
-     [a012][a3]acrossfade=d=0.5:c1=nofade:c2=nofade[aout]" \
-  -map "[vout]" -map "[aout]" \
+# 步骤 1：生成黑场（按需，匹配源视频参数）
+ffmpeg -f lavfi -i "color=c=black:s=720x1280:r=24:d=0.5" \
+       -f lavfi -i "anullsrc=r=44100:cl=stereo" \
+       -t 0.5 -c:v libx264 -c:a aac -shortest black_0.5s.mp4
+
+# 步骤 2：创建 concat 列表（原片不裁切）
+echo "file 'seg1.mp4'" > concat.txt
+echo "file 'seg2.mp4'" >> concat.txt          # seg1→seg2 硬切
+echo "file 'black_0.5s.mp4'" >> concat.txt    # seg2→seg3 黑场
+echo "file 'seg3.mp4'" >> concat.txt
+echo "file 'seg4.mp4'" >> concat.txt          # seg3→seg4 硬切
+
+# 步骤 3：拼接
+ffmpeg -f concat -safe 0 -i concat.txt \
   -c:v libx264 -preset medium -crf 18 \
-  ./output/ep01-final.mp4
+  -c:a aac -b:a 128k \
+  output/epXX-final.mp4
 ```
 
-> 每段首尾各截 0.3s（避免尾帧固定画面突兀+不稳定首帧），段间 0.5s crossfade。总计 3 次渐变，损失 ~1.8s，60s 成片缩短为 ~58.2s——对漫剧体验无感知影响。
+> ⚠️ concat demuxer 要求所有输入文件的编码参数一致（分辨率、帧率、音频采样率）。Seedance 输出的 4 段通常参数一致。黑场用相同参数生成。如果 concat 报错，改用方案 B。
 
-### 8.2 硬切拼接（备选）
+**方案 B：xfade 转场（filter_complex，需要转场效果时）**
 
-如果段间衔接本身很流畅，直接用 concat：
+适用于衔接方式包含 fade/fadewhite/circleclose 等 xfade 转场的情况：
 
 ```bash
-ffmpeg -i ./videos/ep01/seg1.mp4 -i ./videos/ep01/seg2.mp4 \
-       -i ./videos/ep01/seg3.mp4 -i ./videos/ep01/seg4.mp4 \
-  -filter_complex "[0:v][0:a][1:v][1:a][2:v][2:a][3:v][3:a]concat=n=4:v=1:a=1[outv][outa]" \
-  -map "[outv]" -map "[outa]" \
+# 示例：seg1→seg2 硬切，seg2→seg3 fadewhite 0.3s，seg3→seg4 fadeblack 0.5s
+# 每段 15s，seg2→seg3 的 offset = seg1时长 + seg2时长 - 转场时长
+
+ffmpeg -i seg1.mp4 -i seg2.mp4 -i seg3.mp4 -i seg4.mp4 \
+  -filter_complex "
+    [0:v][1:v]concat=n=2:v=1:a=0[v01];
+    [0:a][1:a]concat=n=2:v=0:a=1[a01];
+    [v01][2:v]xfade=transition=fadewhite:duration=0.3:offset=29.7[v012];
+    [a01][2:a]acrossfade=d=0.3[a012];
+    [v012][3:v]xfade=transition=fadeblack:duration=0.5:offset=44.2[vout];
+    [a012][3:a]acrossfade=d=0.5[aout]
+  " -map "[vout]" -map "[aout]" \
   -c:v libx264 -preset medium -crf 18 \
-  ./output/ep01-final.mp4
+  -c:a aac -b:a 128k \
+  output/epXX-final.mp4
 ```
+
+> ⚠️ **offset 计算**：`offset = 前面所有段的累计时长 - 前面所有 xfade 转场的累计时长 - 当前转场时长`。硬切和黑场插入不消耗 offset。具体数值需要根据每段实际时长计算。
+>
+> 💡 **混合方案**：如果一集中既有硬切/黑场又有 xfade 转场，统一用 filter_complex 方案处理（方案 B）。concat demuxer 不支持 xfade。
+
+#### 衔接规划表格式（assets.md 中使用）
+
+```markdown
+## 段间衔接规划
+
+| 衔接 | 场景变化 | 色温变化 | 情绪意图 | 转场方式 | 转场时长 |
+|------|---------|---------|---------|---------|---------|
+| 段1→段2 | 同一场地 | 相同 | 连续 | 硬切 | 0s |
+| 段2→段3 | 更衣室→花拱门 | 相同 | 仪式感升级 | fadewhite | 0.3s |
+| 段3→段4 | 室内→室外 | 暖白→暖金 | 紧张释放 | fadeblack | 0.5s |
+```
+
+### 8.2 历史方案（已弃用）
+
+> **旧方案 v1**：统一 crossfade，每段首尾各截 0.3s + 0.5s crossfade，总损失约 3.3s。
+> **旧方案 v2**：混合转场+微裁切，每段首尾各截 0.1s 防闪烁，总损失约 0.6s。
+> **当前方案 v3**：零裁切+扩展转场库，不截取任何原片内容，闪烁通过转场或局部 fade 处理。
 
 ---
 

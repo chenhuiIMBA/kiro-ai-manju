@@ -290,10 +290,10 @@
 
 | 段 | 状态 | task_id | 备注 |
 |----|------|---------|------|
-| seg1 | submitted | cgt-20260430155418-4nxf8 | — |
-| seg2 | pending | — | — |
-| seg3 | pending | — | — |
-| seg4 | pending | — | — |
+| seg1 | completed | cgt-20260430155418-4nxf8 | seg1.mp4 + lastframe_seg1.png |
+| seg2 | completed | cgt-20260430162205-7rq9p | seg2.mp4 + lastframe_seg2.png |
+| seg3 | completed | cgt-20260430162951-k9frd | seg3.mp4 + lastframe_seg3.png |
+| seg4 | completed | cgt-20260430164022-7mkjc | seg4.mp4 + lastframe_seg4.png |
 
 ## 提交顺序
 

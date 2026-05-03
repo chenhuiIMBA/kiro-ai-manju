@@ -2,8 +2,8 @@
 
 **当前阶段**: 13-batch
 **状态**: in_progress
-**最后更新**: 2026-04-30
-**当前集**: ep02
+**最后更新**: 2026-05-03
+**当前集**: ep07
 **总集数**: 20
 
 ---
@@ -42,3 +42,42 @@
 - `05-videos/ep01/lastframe_seg1~4.png` — 四段尾帧
 - `05-videos/ep01/assets.md` — 视频资产清单（prompt+衔接规划+内心独白+可迁移分析）
 - `06-output/ep01-final.mp4` — EP01 成片（59.5s，720p 9:16）
+- `01-scripts/ep02-script.md` — EP02 剧本（模板A微三幕，用户已确认）
+- `01-scripts/narrative-state.md` — 叙事状态追踪（EP02 已更新）
+- `03-storyboard/ep02/` — EP02 故事板（4段×2帧=8帧）
+- `05-videos/ep02/seg1~4.mp4` — EP02 四段视频（Seedance 2.0，720p 9:16 15s）
+- `05-videos/ep02/lastframe_seg1~4.png` — 四段尾帧
+- `05-videos/ep02/assets.md` — 视频资产清单
+- `06-output/ep02-final.mp4` — EP02 成片（59.5s，720p 9:16）
+- `01-scripts/ep03-script.md` — EP03 剧本（模板B反转结构）
+- `04-human-design/jimu/` — B档：正面图 + 2表情（温和微笑/冰冷威压）+ voice-ref.mp3
+- `03-storyboard/ep03/` — EP03 故事板（4段×2帧=8帧）
+- `05-videos/ep03/seg1~4.mp4` — EP03 四段视频（并发提交，Seedance 2.0）
+- `06-output/ep03-final.mp4` — EP03 成片（59.4s，720p 9:16）
+- `01-scripts/ep04-script.md` — EP04 剧本（模板A微三幕）
+- `01-scripts/narrative-state.md` — 叙事状态追踪（EP04 已更新）
+- `03-storyboard/ep04/` — EP04 故事板（4段×2帧=8帧）
+- `05-videos/ep04/seg1~4.mp4` — EP04 四段视频（并发提交，Seedance 2.0）
+- `06-output/ep04-final.mp4` — EP04 成片（56.7s，720p 9:16）
+- `01-scripts/ep05-script.md` — EP05 剧本（模板C提问-回答）
+- `01-scripts/narrative-state.md` — 叙事状态追踪（EP05 已更新）
+- `03-storyboard/ep05/` — EP05 故事板（4段×2帧=8帧）
+- `05-videos/ep05/seg1~4.mp4` — EP05 四段视频（并发提交，Seedance 2.0）
+- `06-output/ep05-final.mp4` — EP05 成片（56.7s，720p 9:16）
+
+## EP06 产出物
+- `01-scripts/ep06-script.md` — EP06 剧本（模板A微三幕）
+- `01-scripts/narrative-state.md` — 叙事状态追踪（EP06 已更新）
+- `03-storyboard/ep06/` — EP06 故事板（4段×2帧=8帧）
+- `05-videos/ep06/seg1~4.mp4` — EP06 四段视频（并发提交，Seedance 2.0）
+- `05-videos/ep06/lastframe_seg1~4.png` — 四段尾帧
+- `05-videos/ep06/assets.md` — 视频资产清单
+- `06-output/ep06-final.mp4` — EP06 成片（60.1s，720p 9:16）
+
+## EP07 进度
+- [x] 剧本（`01-scripts/ep07-script.md`，模板A微三幕）
+- [x] 叙事状态更新（`narrative-state.md` EP07 已更新）
+- [x] 故事板
+- [x] 视频生成
+- [x] 合成
+- [ ] 成片检查

@@ -146,27 +146,63 @@ assets.md 记录：
 > 段级进度在 `05-videos/ep{NN}/assets.md` 中追踪（seg1 submitted/completed, seg2 submitted/completed...）。
 > 原阶段 08-10 的独立文件不再需要——串行提交逻辑已包含在本阶段内。
 
-### 段级并行化（🆕 可选，满足条件时可用）
+### 段级并行化（默认启用，并发数 3）
 
-> 默认串行提交。但如果四段分属不同场景且衔接方式为 crossfade 或黑场 fade（不需要尾帧传递），理论上可以并行提交，将单集视频生成时间从 4×等待 缩短到 1×等待。
+> Seedance 2.0 API 支持并发数 3。满足并行条件时默认并行提交，将单集视频生成时间从 4×单段等待 缩短到约 1.3×单段等待。
 
 **并行条件**（全部满足才可并行）：
 - [ ] 四段之间没有硬切衔接（不需要尾帧传入下一段）
 - [ ] 不执行最佳帧反馈（并行时无法用上一段的最佳帧）
 - [ ] 四段的 ref-images 互相独立（不共享上一段的产出）
 
-**并行方式**：
-```bash
-# 同时提交四段（不等待）
-python3 <video-gen>/scripts/seedance.py create --prompt "{seg1}" ... &
-python3 <video-gen>/scripts/seedance.py create --prompt "{seg2}" ... &
-python3 <video-gen>/scripts/seedance.py create --prompt "{seg3}" ... &
-python3 <video-gen>/scripts/seedance.py create --prompt "{seg4}" ... &
-# 等待全部完成
-wait
+**并行策略（并发数 3）**：
+
+```
+第一批（同时提交 3 段）：
+  seg1 → create → task_id_1
+  seg2 → create → task_id_2
+  seg3 → create → task_id_3
+
+轮询等待任意一段完成：
+  poll task_id_1, task_id_2, task_id_3
+
+任意一段完成后，立即提交 seg4：
+  seg4 → create → task_id_4
+
+继续等待剩余段全部完成：
+  poll 剩余 task_ids
 ```
 
-**风险**：并行提交可能触发 API 并发限制（取决于火山方舟账户的 QPS 配额）。如果遇到限流错误，退回串行模式。
+**执行方式**：
+
+```bash
+# 第一批：同时提交 seg1/seg2/seg3（不等待）
+python3 seedance.py create --prompt "{seg1}" ... 
+# 记录 task_id_1
+python3 seedance.py create --prompt "{seg2}" ...
+# 记录 task_id_2
+python3 seedance.py create --prompt "{seg3}" ...
+# 记录 task_id_3
+
+# 轮询等待任意一段完成
+# 完成后立即提交 seg4
+python3 seedance.py create --prompt "{seg4}" ...
+# 记录 task_id_4
+
+# 等待全部完成，逐个下载
+python3 seedance.py wait {task_id} --download ...
+```
+
+> ⚠️ 提交时不用 `&` 后台执行——`seedance.py create` 本身是异步的（只提交任务，不等待完成），立即返回 task_id。等待用 `seedance.py wait` 或轮询 `seedance.py status`。
+
+**不满足并行条件时**（有硬切衔接）：退回串行模式，按依赖关系逐段提交。
+
+**混合模式示例**（seg2→seg3 硬切，其余 crossfade）：
+```
+第一批：seg1 + seg2 同时提交（并发 2）
+等待 seg2 完成 → 下载尾帧 → 提交 seg3（依赖 seg2 尾帧）
+seg4 可与 seg3 同时提交（并发 2，如果 seg1 已完成释放了配额）
+```
 
 ### 段级最佳帧反馈（🆕 可选，可跳过）
 
