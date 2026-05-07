@@ -1,5 +1,0 @@
-file '/home/chenhui/work/kiro-ai-manju/projects/test-drama/06-output/_tmp/s1.mp4'
-file '/home/chenhui/work/kiro-ai-manju/projects/test-drama/06-output/_tmp/s2.mp4'
-file '/home/chenhui/work/kiro-ai-manju/projects/test-drama/06-output/_tmp/s3.mp4'
-file '/home/chenhui/work/kiro-ai-manju/projects/test-drama/06-output/_tmp/black.mp4'
-file '/home/chenhui/work/kiro-ai-manju/projects/test-drama/06-output/_tmp/s4.mp4'

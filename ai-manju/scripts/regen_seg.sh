@@ -1,33 +1,40 @@
 #!/bin/bash
-# 重新生成单段视频脚本
+# 重新生成单个 seg 视频脚本（版本化版本）
 #
-# 从 assets.md 中读取指定段的完整参数，重新提交 Seedance，
-# 等待完成后下载，备份旧文件，替换为新文件。
+# 从 assets.md 中读取指定 seg 的完整参数（按 _convention.md 标准格式），
+# 重新提交 Seedance，等待完成后下载，备份旧文件，
+# 在 assets.md 的版本历史表中追加新版本（不覆盖旧 prompt）。
 #
 # 用法:
-#   bash regen_seg.sh <项目目录> <集号> <段号> [选项]
+#   bash regen_seg.sh <项目目录> <集号> <seg号> [选项]
 #
 # 选项:
 #   -s <seed>          指定 seed 值（不传则随机）
 #   -S                 自动使用上一次的 seed（从 task_id 查询）
+#   --prompt-file <路径>  使用文件中的新 prompt 替代旧 prompt（会在 assets.md 写入 vN 块）
 #   --seedance <路径>  seedance.py 路径（默认 video-generation/scripts/seedance.py）
+#   --yes-cascade      跳过级联重生成确认（危险，慎用）
 #
 # 示例:
-#   bash regen_seg.sh projects/test-drama 06 3              # 随机 seed
-#   bash regen_seg.sh projects/test-drama 06 3 -S           # 复用上一次 seed
-#   bash regen_seg.sh projects/test-drama 06 3 -s 12345     # 指定 seed
+#   bash regen_seg.sh projects/new-drama 01 3                         # 随机 seed，复用原 prompt
+#   bash regen_seg.sh projects/new-drama 01 3 -S                      # 复用上一次 seed
+#   bash regen_seg.sh projects/new-drama 01 3 -s 12345                # 指定 seed
+#   bash regen_seg.sh projects/new-drama 01 3 --prompt-file new.txt   # 用新 prompt 重生成
 #
 # 流程:
-#   1. 从 assets.md 解析该段的 prompt、ref-images、audio 等参数
-#   2. 备份旧的 seg{N}.mp4 和 lastframe_seg{N}.png 到 _backup/
-#   3. 提交 Seedance 任务（可选传入 seed）
-#   4. 等待完成并下载
-#   5. 重命名为 seg{N}.mp4 和 lastframe_seg{N}.png
-#   6. 更新 assets.md 中的 task_id 和 seed
+#   1. 从 assets.md 解析该 seg 的 prompt、ref-images、audio（新标准格式）
+#   2. **检测下游依赖链**——如 seg-3 是 seg-4/seg-5 的起始画面来源，提示用户是否级联重生成
+#   3. 备份旧的 seg{N}.mp4 和 lastframe_seg{N}.png 到 _backup/
+#   4. 如有新 prompt，将 vN 块追加到 assets.md 中对应的 seg 区域
+#   5. 提交 Seedance 任务（可选传入 seed）
+#   6. 等待完成并下载
+#   7. 重命名为 seg{N}.mp4 和 lastframe_seg{N}.png
+#   8. 在 assets.md 的版本历史表追加新行，更新片段划分表的 task_id/seed
+#   9. 如用户确认级联，自动递归重生成所有下游 seg
 #
 # 前置条件:
 #   - ARK_API_KEY 环境变量已设置
-#   - assets.md 中有该段的完整参数块
+#   - assets.md 使用 _convention.md 定义的标准 seg 格式
 
 set -e
 
@@ -39,12 +46,16 @@ SEG=""
 SEEDANCE="video-generation/scripts/seedance.py"
 SEED_VALUE=""
 USE_PREV_SEED=false
+PROMPT_FILE=""
+YES_CASCADE=false
 
 while [ $# -gt 0 ]; do
   case "$1" in
     -s) SEED_VALUE="$2"; shift 2 ;;
     -S) USE_PREV_SEED=true; shift ;;
+    --prompt-file) PROMPT_FILE="$2"; shift 2 ;;
     --seedance) SEEDANCE="$2"; shift 2 ;;
+    --yes-cascade) YES_CASCADE=true; shift ;;
     *)
       if [ -z "$PROJECT" ]; then PROJECT="$1"
       elif [ -z "$EP" ]; then EP="$1"
@@ -55,9 +66,11 @@ while [ $# -gt 0 ]; do
 done
 
 if [ -z "$PROJECT" ] || [ -z "$EP" ] || [ -z "$SEG" ]; then
-  echo "用法: bash $0 <项目目录> <集号> <段号> [选项]"
-  echo "选项: -s <seed>  指定seed  |  -S  复用上一次seed  |  --seedance <路径>"
-  echo "示例: bash $0 projects/test-drama 06 3 -S"
+  echo "用法: bash $0 <项目目录> <集号> <seg号> [选项]"
+  echo "选项: -s <seed>  指定seed  |  -S  复用上一次seed"
+  echo "      --prompt-file <路径>  使用新 prompt"
+  echo "      --seedance <路径>     seedance.py 路径"
+  echo "      --yes-cascade         自动级联重生成下游 seg（慎用）"
   exit 1
 fi
 
@@ -76,40 +89,32 @@ if [ ! -f "$SEEDANCE" ]; then
 fi
 
 echo "🔄 重新生成 EP${EP} seg${SEG}"
-echo "   assets: $ASSETS"
 
-# ── 查询上一次 seed（如果 -S 标志开启）────────────────
+# ── 使用独立 Python 脚本解析 assets.md ───────────────
 
+PARSE_SCRIPT=$(dirname "$0")/_assets_parser.py
+
+if [ ! -f "$PARSE_SCRIPT" ]; then
+  echo "❌ 未找到解析器: $PARSE_SCRIPT"
+  exit 1
+fi
+
+# 查询上一次 seed
 if $USE_PREV_SEED && [ -z "$SEED_VALUE" ]; then
-  # 从 assets.md 中提取上一次的 task_id
-  PREV_TASK_ID=$(python3 -c "
-import re
-with open('$ASSETS', 'r') as f:
-    content = f.read()
-m = re.search(r'\| seg${SEG}\s*\|[^|]*\|\s*(\S+)\s*\|', content)
-if m:
-    print(m.group(1))
-" 2>/dev/null)
-
+  PREV_TASK_ID=$(python3 "$PARSE_SCRIPT" get-task-id "$ASSETS" "$SEG" 2>/dev/null)
   if [ -n "$PREV_TASK_ID" ] && [ "$PREV_TASK_ID" != "—" ]; then
     echo "   查询上一次 seed (task: $PREV_TASK_ID)..."
     PREV_SEED=$(python3 "$SEEDANCE" status "$PREV_TASK_ID" 2>/dev/null | python3 -c "
-import sys, json, re
-text = sys.stdin.read()
-# 尝试从 JSON 输出中提取 seed
-m = re.search(r'\"seed\"\s*:\s*(\d+)', text)
-if m:
-    print(m.group(1))
+import sys, re
+m = re.search(r'\"seed\"\s*:\s*(\d+)', sys.stdin.read())
+if m: print(m.group(1))
 " 2>/dev/null)
-
     if [ -n "$PREV_SEED" ]; then
       SEED_VALUE="$PREV_SEED"
-      echo "   上一次 seed: $SEED_VALUE（将复用）"
+      echo "   上一次 seed: $SEED_VALUE"
     else
       echo "   ⚠️ 无法查询上一次 seed，将使用随机 seed"
     fi
-  else
-    echo "   ⚠️ 未找到上一次 task_id，将使用随机 seed"
   fi
 fi
 
@@ -119,94 +124,40 @@ else
   echo "   seed: 随机"
 fi
 
-# ── 解析 assets.md ────────────────────────────────────
+# 读取新 prompt（如指定了 --prompt-file）
+NEW_PROMPT=""
+if [ -n "$PROMPT_FILE" ]; then
+  if [ ! -f "$PROMPT_FILE" ]; then
+    echo "❌ prompt 文件不存在: $PROMPT_FILE"
+    exit 1
+  fi
+  NEW_PROMPT=$(cat "$PROMPT_FILE")
+  echo "   使用新 prompt（${#NEW_PROMPT} 字符）"
+fi
 
-# 提取该段的 Prompt 块（在 ```...``` 之间）
-# 查找模式：## 段{N} 精简版 Prompt → 找到 ### Prompt → 提取 ``` 块
-PROMPT=$(python3 -c "
-import re, sys
-
-with open('$ASSETS', 'r') as f:
-    content = f.read()
-
-# 找到该段的区域
-seg_pattern = r'## 段${SEG} 精简版 Prompt.*?(?=## 段\d|## 段级进度|\Z)'
-seg_match = re.search(seg_pattern, content, re.DOTALL)
-if not seg_match:
-    print('ERROR: 未找到段${SEG}的prompt区域', file=sys.stderr)
-    sys.exit(1)
-
-seg_text = seg_match.group()
-
-# 提取 ### Prompt 下的 \`\`\` 块
-prompt_pattern = r'### Prompt\s*\n+\`\`\`\s*\n(.*?)\n\`\`\`'
-prompt_match = re.search(prompt_pattern, seg_text, re.DOTALL)
-if not prompt_match:
-    print('ERROR: 未找到段${SEG}的prompt内容', file=sys.stderr)
-    sys.exit(1)
-
-print(prompt_match.group(1).strip())
-")
+# 获取当前 prompt
+if [ -n "$NEW_PROMPT" ]; then
+  PROMPT="$NEW_PROMPT"
+else
+  PROMPT=$(python3 "$PARSE_SCRIPT" get-prompt "$ASSETS" "$SEG")
+fi
 
 if [ -z "$PROMPT" ]; then
-  echo "❌ 无法从 assets.md 解析段${SEG}的 prompt"
+  echo "❌ 无法获取 seg ${SEG} 的 prompt"
   exit 1
 fi
 
-echo "   prompt: $(echo "$PROMPT" | head -1)..."
+echo "   prompt: $(echo "$PROMPT" | head -1 | cut -c1-60)..."
 
-# 提取 ref-images 文件列表
-REF_IMAGES=$(python3 -c "
-import re, sys
+# 获取 ref-images 和 audio 列表
+REF_IMAGES=$(python3 "$PARSE_SCRIPT" get-refs "$ASSETS" "$SEG" "$PROJECT")
+AUDIO_FILES=$(python3 "$PARSE_SCRIPT" get-audios "$ASSETS" "$SEG" "$PROJECT")
 
-with open('$ASSETS', 'r') as f:
-    content = f.read()
+REF_COUNT=$(echo "$REF_IMAGES" | grep -cv '^$' || echo 0)
+AUDIO_COUNT=$(echo "$AUDIO_FILES" | grep -cv '^$' || echo 0)
 
-seg_pattern = r'## 段${SEG} 精简版 Prompt.*?(?=## 段\d|## 段级进度|\Z)'
-seg_match = re.search(seg_pattern, content, re.DOTALL)
-if not seg_match:
-    sys.exit(0)
-
-seg_text = seg_match.group()
-
-# 提取完整参数块中的 ref-images 路径
-# 格式: 图片N: 路径
-ref_pattern = r'图片\d+:\s*(.+)'
-refs = re.findall(ref_pattern, seg_text)
-
-# 将相对路径转为从项目目录开始的路径
-for ref in refs:
-    ref = ref.strip()
-    # 路径可能是 03-storyboard/... 或 04-human-design/...
-    print('$PROJECT/' + ref)
-")
-
-# 提取 audio 文件列表
-AUDIO_FILES=$(python3 -c "
-import re, sys
-
-with open('$ASSETS', 'r') as f:
-    content = f.read()
-
-seg_pattern = r'## 段${SEG} 精简版 Prompt.*?(?=## 段\d|## 段级进度|\Z)'
-seg_match = re.search(seg_pattern, content, re.DOTALL)
-if not seg_match:
-    sys.exit(0)
-
-seg_text = seg_match.group()
-
-# 提取 audio 路径
-# 格式: 音频N: 路径
-audio_pattern = r'音频\d+:\s*(.+)'
-audios = re.findall(audio_pattern, seg_text)
-
-for a in audios:
-    a = a.strip()
-    print('$PROJECT/' + a)
-")
-
-echo "   ref-images: $(echo "$REF_IMAGES" | wc -l) 张"
-echo "   audio: $(echo "$AUDIO_FILES" | wc -l) 条"
+echo "   ref-images: ${REF_COUNT} 张"
+echo "   audio: ${AUDIO_COUNT} 条"
 
 # ── 备份旧文件 ────────────────────────────────────────
 
@@ -215,12 +166,12 @@ TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
 if [ -f "$VDIR/seg${SEG}.mp4" ]; then
   cp "$VDIR/seg${SEG}.mp4" "$BACKUP/seg${SEG}_${TIMESTAMP}.mp4"
-  echo "   备份: seg${SEG}.mp4 → _backup/seg${SEG}_${TIMESTAMP}.mp4"
+  echo "   💾 备份: seg${SEG}.mp4 → _backup/seg${SEG}_${TIMESTAMP}.mp4"
 fi
 
 if [ -f "$VDIR/lastframe_seg${SEG}.png" ]; then
   cp "$VDIR/lastframe_seg${SEG}.png" "$BACKUP/lastframe_seg${SEG}_${TIMESTAMP}.png"
-  echo "   备份: lastframe_seg${SEG}.png → _backup/"
+  echo "   💾 备份: lastframe_seg${SEG}.png → _backup/"
 fi
 
 # ── 构建 seedance 命令 ────────────────────────────────
@@ -228,7 +179,6 @@ fi
 CMD="python3 $SEEDANCE create"
 CMD="$CMD --prompt \"$PROMPT\""
 
-# 添加 ref-images
 if [ -n "$REF_IMAGES" ]; then
   REF_ARGS=""
   while IFS= read -r ref; do
@@ -244,7 +194,6 @@ if [ -n "$REF_IMAGES" ]; then
   fi
 fi
 
-# 添加 audio
 if [ -n "$AUDIO_FILES" ]; then
   AUDIO_ARGS=""
   while IFS= read -r aud; do
@@ -260,21 +209,16 @@ if [ -n "$AUDIO_FILES" ]; then
   fi
 fi
 
-CMD="$CMD --ratio 9:16 --duration 15 --generate-audio true --return-last-frame true"
+CMD="$CMD --ratio 9:16 --generate-audio true --return-last-frame true"
 
-# 添加 seed（如果指定了）
 if [ -n "$SEED_VALUE" ]; then
   CMD="$CMD --seed $SEED_VALUE"
 fi
 
 echo ""
 echo "📤 提交 Seedance 任务..."
-echo "   命令: $CMD"
 echo ""
 
-# ── 提交并等待 ────────────────────────────────────────
-
-# 提交任务，提取 task_id
 TASK_OUTPUT=$(eval "$CMD" 2>&1)
 echo "$TASK_OUTPUT"
 
@@ -285,7 +229,6 @@ fi
 
 if [ -z "$TASK_ID" ]; then
   echo "❌ 无法提取 task_id"
-  echo "$TASK_OUTPUT"
   exit 1
 fi
 
@@ -295,53 +238,46 @@ python3 "$SEEDANCE" wait "$TASK_ID" --download "$VDIR/"
 
 # ── 重命名下载文件 ────────────────────────────────────
 
-# seedance.py 下载的文件名格式: seedance_{task_id}_{timestamp}.mp4
 NEW_VIDEO=$(ls -t "$VDIR"/seedance_${TASK_ID}_*.mp4 2>/dev/null | head -1)
 NEW_LASTFRAME=$(ls -t "$VDIR"/lastframe_${TASK_ID}.png 2>/dev/null | head -1)
 
 if [ -n "$NEW_VIDEO" ]; then
   mv "$NEW_VIDEO" "$VDIR/seg${SEG}.mp4"
   echo "✅ seg${SEG}.mp4 已更新"
-else
-  echo "⚠️  未找到下载的视频文件"
 fi
 
 if [ -n "$NEW_LASTFRAME" ]; then
   mv "$NEW_LASTFRAME" "$VDIR/lastframe_seg${SEG}.png"
   echo "✅ lastframe_seg${SEG}.png 已更新"
-else
-  echo "⚠️  未找到尾帧文件"
 fi
 
-# ── 更新 assets.md 中的 task_id 和 seed ─────────────
-
-# 查询新任务的 seed
+# 查询新 seed
 NEW_SEED=$(python3 "$SEEDANCE" status "$TASK_ID" 2>/dev/null | python3 -c "
 import sys, re
-text = sys.stdin.read()
-m = re.search(r'\"seed\"\s*:\s*(\d+)', text)
-if m:
-    print(m.group(1))
+m = re.search(r'\"seed\"\s*:\s*(\d+)', sys.stdin.read())
+if m: print(m.group(1))
 " 2>/dev/null)
 
-python3 -c "
-import re
+# ── 更新 assets.md ────────────────────────────────────
 
-with open('$ASSETS', 'r') as f:
-    content = f.read()
+# 构建更新命令
+UPDATE_ARGS=""
+UPDATE_ARGS="$UPDATE_ARGS --task-id $TASK_ID"
+if [ -n "$NEW_SEED" ]; then
+  UPDATE_ARGS="$UPDATE_ARGS --seed $NEW_SEED"
+fi
+if [ -n "$NEW_PROMPT" ]; then
+  # 写入临时文件避免命令行长度问题
+  TMP_PROMPT=$(mktemp)
+  echo "$NEW_PROMPT" > "$TMP_PROMPT"
+  UPDATE_ARGS="$UPDATE_ARGS --new-prompt-file $TMP_PROMPT"
+fi
 
-# 更新段级进度追踪表中的 task_id
-pattern = r'(\| seg${SEG}\s*\|[^|]*\|)\s*\S+\s*(\|.*)'
-replacement = r'\1 ${TASK_ID} \2'
-new_content = re.sub(pattern, replacement, content)
+python3 "$PARSE_SCRIPT" append-version "$ASSETS" "$SEG" $UPDATE_ARGS
 
-if new_content != content:
-    with open('$ASSETS', 'w') as f:
-        f.write(new_content)
-    print('   assets.md task_id 已更新')
-else:
-    print('   ⚠️ assets.md task_id 未更新（格式可能不匹配）')
-"
+if [ -n "$TMP_PROMPT" ] && [ -f "$TMP_PROMPT" ]; then
+  rm -f "$TMP_PROMPT"
+fi
 
 echo ""
 echo "🎬 重新生成完成: EP${EP} seg${SEG}"
@@ -351,5 +287,46 @@ if [ -n "$NEW_SEED" ]; then
 fi
 echo "   旧文件备份在: $BACKUP/"
 echo ""
+
+# ── 级联检测：找出依赖本 seg 的下游 seg ──────────────
+
+DOWNSTREAM_SEGS=$(python3 "$PARSE_SCRIPT" find-downstream "$ASSETS" "$SEG" 2>/dev/null)
+
+if [ -n "$DOWNSTREAM_SEGS" ]; then
+  echo "⚠️  级联影响检测：以下 seg 依赖 seg-${SEG} 的尾帧作为起始画面："
+  echo "$DOWNSTREAM_SEGS" | sed 's/^/       seg-/'
+  echo ""
+  echo "   新 seg-${SEG} 生成后，其尾帧已变化。下游 seg 的起始画面与"
+  echo "   重生成的 seg-${SEG} 尾帧**不一致**，衔接会断。"
+  echo ""
+
+  if $YES_CASCADE; then
+    echo "   --yes-cascade 已设置，自动级联重生成。"
+    CASCADE="yes"
+  else
+    read -p "   是否级联重生成所有下游 seg？[y/N] " CASCADE
+    CASCADE=$(echo "$CASCADE" | tr '[:upper:]' '[:lower:]')
+  fi
+
+  if [ "$CASCADE" = "y" ] || [ "$CASCADE" = "yes" ]; then
+    echo ""
+    echo "🔁 开始级联重生成..."
+    for downstream_seg in $DOWNSTREAM_SEGS; do
+      echo ""
+      echo "  → 级联重生成 seg-${downstream_seg}"
+      # 递归调用自己重跑下游 seg
+      bash "$0" "$PROJECT" "$EP" "$downstream_seg" --seedance "$SEEDANCE" --yes-cascade
+    done
+    echo ""
+    echo "✅ 级联重生成完成"
+  else
+    echo ""
+    echo "⚠️  用户选择不级联。衔接可能不完美，请人工确认。"
+    echo "   或稍后运行: bash $0 $PROJECT $EP <下游seg号>"
+  fi
+fi
+
+echo ""
 echo "下一步: 重新合成成片"
-echo "   bash ai-manju/scripts/composite.sh $PROJECT $EP <衔接模式>"
+echo "   bash <ai-manju>/scripts/composite.sh $PROJECT $EP"
+echo "   （<ai-manju> 在 OpenClaw 环境下为 /root/.openclaw/workspace/skills/ai-manju，其他环境为工作区根目录下 ai-manju/）"
