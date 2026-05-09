@@ -160,6 +160,7 @@ mv ./02-moodboard/seedream_*.jpg ./02-moodboard/mood_{NN}.png
 - [ ] 画风与 `visual-style-spec.md` 一致
 - [ ] 无任何人物形象（不含具体角色、剪影、背影、人影）
 - [ ] assets.md 已记录完整 Prompt + 命令参数 + 任务 ID + URL + 变体标签
+- [ ] **ASSETS-INDEX.md 已同步更新**（门禁 5）
 - [ ] 用户已确认视觉方向
 
 ## 完成后

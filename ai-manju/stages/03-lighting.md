@@ -120,5 +120,5 @@
 
 ## 完成后
 
-→ `stages/04-scenes.md`
-将 `STATE.md` 中 `当前阶段` 更新为 `04-scenes`，勾选 03。
+→ `stages/04-character.md`
+将 `STATE.md` 中 `当前阶段` 更新为 `04-character`，勾选 03。

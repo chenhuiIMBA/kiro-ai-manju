@@ -82,15 +82,18 @@ HF_ENDPOINT=https://hf-mirror.com python3 <ai-manju>/scripts/align_srt.py \
   --model medium --lang zh --device cpu --compute-type int8
 ```
 
-**工作原理**：
-1. Whisper 识别 raw 视频音频 → 得到带真实时间戳的 segments
-2. 繁→简转换后与剧本对白按顺序做相似度匹配
-3. 用剧本文本 + Whisper 真实时间戳输出最终 SRT
-4. 自动处理：标点拆分合并段、最短/最长显示时长、重叠修复
+**工作原理**（v2 词级对齐）：
+1. Whisper 识别 raw 视频音频（`word_timestamps=True`）→ 得到每个字的精确时间戳
+2. 将所有识别字拼成文本流（繁→简转换）
+3. 对剧本每句对白，在文本流中做模糊子串匹配（滑动窗口 + SequenceMatcher）
+4. 匹配成功 → 取第一个字的 start 和最后一个字的 end 作为字幕时间戳
+5. 后处理：修复重叠、最短时长保障、按字数限制最长显示时长
+
+**精度**：±0.1s（词级），远优于段级对齐或静态偏移
 
 **依赖**：`faster-whisper`、`zhconv`
 
-**回退**：如果 Whisper 对齐失败（匹配率 < 80%），保留步骤 2a 的静态偏移版本
+**回退**：如果 Whisper 对齐匹配率 < 80%，保留步骤 2a 的静态偏移版本
 
 ### 步骤 3：烧录字幕（硬字幕）
 

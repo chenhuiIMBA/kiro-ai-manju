@@ -91,14 +91,15 @@ projects/<项目名>/
 └── 07-consistency-check/        # 阶段 09、10 产出
 ```
 
-## 四大门禁（全局硬性约束）
+## 五大门禁（全局硬性约束）
 
-详见 `stages/_convention.md`。
+> 完整定义和违规后果见 `stages/_convention.md` §五大门禁。本节只列名称，避免多处定义不同步。
 
 1. **Prompt 审核门禁**：调用任何生成 API 前，完整 prompt + 参数必须先给用户审核
 2. **即时登记门禁**：生成 → 重命名 → 登记 assets.md 三步连贯，禁止批量补录
 3. **STATE.md 门禁**：每个阶段完成立即更新 STATE.md，不更新不进下一阶段
-4. **narrative-state 门禁**：剧本（阶段 06）确认后必须更新 narrative-state.md，否则不进阶段 07
+4. **narrative-state 门禁**：剧本（阶段 05）确认后必须更新 narrative-state.md，否则不进阶段 07
+5. **ASSETS-INDEX 门禁**：任何产生/修改/删除资产的阶段完成后必须同步更新 ASSETS-INDEX.md
 
 ## 核心约束
 
@@ -182,15 +183,37 @@ character-bible 包含角色的 **Want/Need/Flaw/Ghost** 四维——这些是**
 - `video-generation` skill（Seedance + Seedream 脚本）
 - `tts` skill（角色音色参考，可选）
 - FFmpeg
+- `faster-whisper`（字幕自动对齐，pip install faster-whisper）
+- `zhconv`（繁简转换，pip install zhconv）
 
 ## 工具脚本
 
 - `scripts/init_project.py` — 初始化项目（支持 `--from-template`）
 - `scripts/composite.sh` — 合成成片（concat 拼接，自动备份旧版）
 - `scripts/regen_seg.sh` — 重新生成单 seg（版本化、备份、更新 assets.md）
+- `scripts/batch_gen.py` — 批量生成一集所有 seg（读 seg-config.py，自动依赖调度+并发+重命名+更新 assets.md+生成 batch-report.md）
+- `scripts/align_srt.py` — Whisper 词级字幕自动对齐（faster-whisper + zhconv）
+- `scripts/validate_script.py` — 剧本正文 vs 汇总表一致性校验（阶段 05 验收，治理教训 #16）
+- `scripts/regen_assets_index.py` — 扫描项目资产生成 ASSETS-INDEX.md（门禁 5，支持 `--check` CI 模式）
+- `scripts/render_assets.py` — 从 seg-config.py 单源渲染 assets.md 段详情（治理教训 #15 双写）
+- `scripts/drift_check.py` — 跨集漂移热检测（色调检查始终可用，面部/音色需 insightface+pyannote）
 
 ## 参考
 
 - `stages/_convention.md` — 阶段文件格式规范、术语表、四大门禁、assets.md 标准格式
 - `references/prompt-guide.md` — prompt 模板 + 审查清单 + 精简流程 + 内心独白指南 + 细节防错规范
 - `references/workflow-detail.md` — 分步详解
+
+## 未来优化 TODO
+
+以下改进已识别但尚未实施（保留给后续迭代）：
+
+- **narrative-state checkpoint 机制**：每 5 集把已兑现伏笔和已揭露信息归档到 `narrative-state-archive/ep01-05.md`，主文件保留活跃条目（避免 20 集后文件过长）
+- **P1 批次审核 AI 预审标红**：AI 预审时标出"高风险段"（3 角色同框、复合动作、手部特写、镜面反射），用户重点审核
+- **字幕 SRT 烧录前 diff**：align_srt 烧录前把 SRT 与剧本对白汇总表做编辑距离对比，差异大时警告
+- **drift_check 完整实现**：`drift_check.py` 的骨架已就绪，面部/音色 embedding 提取逻辑待补完
+  - **面部检测**：集成 insightface（MIT 协议，无需 API Key，首次运行自动下载约 200-300MB 模型）
+  - **音色检测（推荐方案）**：用 Resemblyzer（MIT 协议，完全免登录，一行 `pip install resemblyzer` 即可）
+  - **音色检测（高精度可选）**：pyannote.audio —— 库本身免费但模型是 HuggingFace gated model，需要用户注册 HF 账号 + 接受条款 + 配置 `HF_TOKEN`。适合对音色一致性有更高要求的项目
+  - 实施时优先 Resemblyzer 作为默认方案，pyannote 作为 opt-in 高精度模式（`--backend pyannote`）
+

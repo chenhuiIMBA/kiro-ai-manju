@@ -1,12 +1,13 @@
-# 阶段 05：角色设计
+# 阶段 04：角色设计
 
 > 工具：Seedream 5.0（全身图 + 多视图）+ TTS skill（音色参考）
 > ⚠️ 必须先用户确认全身图，再生成多视图
+>
+> **阶段顺序说明（2026-05-06 重排后）**：04-character → 05-script → 06-scenes。场景图按剧本需要逐集生成，角色库一次出齐。
 
 ## 前置条件
 
 - `01-scripts/character-bible.md` 存在（角色内在画像）
-- `03-scenes/` 场景库已确认（角色设计可参考场景色调避免融入背景）
 - `01-scripts/lighting-philosophy.md` 存在
 - `01-scripts/color-palette.md` 存在
 
@@ -211,9 +212,10 @@ mv ./04-character/{角色名}/tts_*.mp3 ./04-character/{角色名}/voice-ref.mp3
 - [ ] 多视图的面部特征与全身图一致
 - [ ] voice-ref.mp3 音色与角色气质匹配
 - [ ] 资产清单完整（prompt + task_id + 参数）
+- [ ] **ASSETS-INDEX.md 已同步更新**（门禁 5，新增角色行）
 - [ ] 用户已确认
 
 ## 完成后
 
-→ `stages/06-script.md`
-将 `STATE.md` 中 `当前阶段` 更新为 `06-script`，勾选 05。
+→ `stages/05-script.md`
+将 `STATE.md` 中 `当前阶段` 更新为 `05-script`，勾选 04。
