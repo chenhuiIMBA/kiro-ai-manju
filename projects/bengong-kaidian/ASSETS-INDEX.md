@@ -2,7 +2,7 @@
 
 > 本文件是项目所有生成资产的快速索引。每次新建/修改资产后同步更新。
 > AI 进入任何阶段前先读此文件定位资产，不需要逐目录扫描。
-> 最后更新：2026-05-08
+> 最后更新：2026-05-10（由 regen_assets_index.py 生成）
 
 ---
 
@@ -27,7 +27,7 @@
 | 赵太师府邸 | `zhaotaishi-fu` | ✅ | 权臣府邸内厅 |
 
 **统计**：15 场景，main.png 15/15
-**ref-images 用法**：阶段 07 直接传入 `main.png`（不需要 multiview）；需要群演布局锚定时可传入场景变体图（如 `jibai-buju.png`）
+**ref-images 用法**：阶段 07 直接传入 `main.png`（不需要 multiview）
 
 ---
 
@@ -35,22 +35,22 @@
 
 | 中文名 | 目录名 | front.png | multiview.png | voice-ref.mp3 | 音色 ID |
 |--------|--------|-----------|---------------|---------------|---------|
-| 沈鹿溪 | `shenluxi` | ✅ | ✅ | ✅ | zh_female_meilinvyou (neutral) |
-| 萧珩 | `xiaoheng` | ✅ | ✅ | ✅ | zh_male_qingcang (coldness) |
 | 柳如烟 | `liuruyan` | ✅ | ✅ | ✅ | zh_female_gaolengyujie (coldness) |
-| 温婉 | `wenwan` | ✅ | ✅ | ✅ | zh_female_meilinvyou (tender) |
-| 太后 | `taihou` | ✅ | ✅ | ✅ | zh_female_wuzetian (coldness) |
-| 赵太师 | `zhaotaishi` | ✅ | ✅ | ✅ | zh_male_qingcang (neutral) |
+| 沈鹿溪 | `shenluxi` | ✅ | ✅ | ✅ | zh_female_meilinvyou (neutral) |
 | 孙大厨 | `sundachu` | ✅ | ✅ | ✅ | zh_male_qingcang (happy) |
+| 太后 | `taihou` | ✅ | ✅ | ✅ | zh_female_wuzetian (coldness) |
+| 温婉 | `wenwan` | ✅ | ✅ | ✅ | zh_female_meilinvyou (tender) |
+| 萧珩 | `xiaoheng` | ✅ | ✅ | ✅ | zh_male_qingcang (coldness) |
 | 小桃 | `xiaotao` | ✅ | ✅ | ✅ | zh_female_sajiaoxuemei (excited) |
+| 赵太师 | `zhaotaishi` | ✅ | ✅ | ✅ | zh_male_qingcang (neutral) |
 
-**统计**：8 角色，全部 3 件套齐全
+**统计**：8 角色，全套齐全 8/8
 
 ### 群演角色（04-character/_extras/）
 
 | 中文名 | 目录名 | multiview.png | 用途 |
 |--------|--------|---------------|------|
-| 众嫔妃（4人） | `_extras/bingfei-group` | ✅ | 背景群演，暖色系（杏黄/鹅黄/浅橙/藕粉） |
+| 众嫔妃群像 角色参考 | `_extras/bingfei-group` | ✅ |  |
 
 ---
 
@@ -60,18 +60,20 @@
 |----|------|--------|------|
 | EP01 | `05-videos/ep01/` | 14 | ✅ 全部生成 |
 | EP02 | `05-videos/ep02/` | 13 | ✅ 全部生成 |
-| EP03 | `05-videos/ep03/` | 12 | ⏳ 进行中（seg-1 ✅ / 2-12 pending，P0 逐 seg 审核模式） |
+| EP03 | `05-videos/ep03/` | 12 | ✅ 全部生成 |
 
 ---
 
 ## 成片产出（06-output/）
 
-| 集 | 文件 | 状态 |
-|----|------|------|
-| EP01 | `ep01-raw.mp4`（41M，无字幕） | ✅ |
-| EP01 | `ep01-final.mp4`（24M，带字幕） | ✅ |
-| EP02 | `ep02-raw.mp4` | ✅ |
-| EP02 | `ep02-final.mp4` | ✅ |
+| 集 | 文件 | 大小 | 状态 |
+|----|------|------|------|
+| EP01 | `ep01-final.mp4`（带字幕） | 39M | ✅ |
+| EP01 | `ep01-raw.mp4`（无字幕） | 40M | ✅ |
+| EP02 | `ep02-final.mp4`（带字幕） | 37M | ✅ |
+| EP02 | `ep02-raw.mp4`（无字幕） | 38M | ✅ |
+| EP03 | `ep03-final.mp4`（带字幕） | 46M | ✅ |
+| EP03 | `ep03-raw.mp4`（无字幕） | 48M | ✅ |
 
 ---
 
