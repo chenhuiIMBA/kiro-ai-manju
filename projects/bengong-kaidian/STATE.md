@@ -1,13 +1,13 @@
 # STATE — bengong-kaidian（《本宫想开店》）
 
 **当前阶段**: 10-batch
-**状态**: pending
-**最后更新**: 2026-05-10
-**当前集**: ep03
-**当前子阶段**: 09-review
+**状态**: in-progress（EP04 已完成，EP05 剧本已确认）
+**最后更新**: 2026-05-11
+**当前集**: ep05
+**当前子阶段**: 06-scenes
 **总集数**: 80
 **每集目标时长**: 120s（初始化时确定，后续剧本/切分以此为基准）
-**信心度等级**: P0-全确认
+**信心度等级**: P0-全确认（EP04 重试率降至 12%，考虑 EP05 升级 P1）
 
 
 ---
@@ -45,4 +45,20 @@
 - [x] 06-scenes  ← 已完成（复用 xuanxiu-dadian + jinhuagong，无需新建）
 - [x] 07-video  ← 已完成（12 seg 全部生成）
 - [x] 08-composite  ← 已完成（raw + final 成片已产出，码率偏差 -4.31% ✅）
-- [ ] 09-review  ← 待进入
+- [x] 09-review  ← 已完成（AI 预筛通过，技术参数达标，用户整体复盘通过）
+
+## 本集进度（ep04）
+
+- [x] 05-script  ← 已完成（EP04 v2 剧本确认 + narrative-state 已更新至 EP04）
+- [x] 06-scenes  ← 已完成（御花园新增种菜角落变体图 zhongcai-jiao.png；冷月宫/御花园 main.png 复用）
+- [x] 07-video  ← 已完成（12 seg 全部生成，P0 逐 seg，重试率 12%）
+- [x] 08-composite  ← 已完成（raw + final 成片已产出，码率偏差 -3.03% ✅，时长 121.69s）
+- [x] 09-review  ← 已完成（技术参数全部达标，字幕 Whisper 对齐 14/15，用户确认通过）
+
+## 本集进度（ep05）
+
+- [x] 05-script  ← 已完成（EP05 v1 剧本确认 + narrative-state 已更新至 EP05）
+- [x] 06-scenes  ← 已完成（御膳房 yushangfang/main.png 完全匹配；宫道 gongdao/main.png 复用+prompt 覆盖深夜光线）
+- [ ] 07-video
+- [ ] 08-composite
+- [ ] 09-review

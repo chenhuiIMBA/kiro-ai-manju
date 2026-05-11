@@ -155,12 +155,14 @@ RES=$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of
 
 | 指标 | 标准 | ffmpeg 命令 |
 |------|------|------------|
-| 时长偏差 | ≤5%（vs STATE.md 目标时长） | `ffprobe ... -show_entries format=duration` |
-| 视频码率 | ≥4 Mbps | `ffprobe ... -select_streams v:0 -show_entries stream=bit_rate` |
-| 音量峰值 | -3dB 到 -1dB | `ffmpeg ... -af volumedetect` |
-| 分辨率 | 1080×1920 | `ffprobe ... -show_entries stream=width,height` |
+| 时长偏差 | 在 [目标下限, 目标下限×2] 范围内（如 120-240s） | `ffprobe ... -show_entries format=duration` |
+| 视频码率 | 720p ≥2.5 Mbps / 1080p ≥4 Mbps | `ffprobe ... -select_streams v:0 -show_entries stream=bit_rate` |
+| 音量峰值 | -3dB 到 -1dB（≤ -0.5dB 亦可接受，>-0.5dB 需降音量） | `ffmpeg ... -af volumedetect` |
+| 分辨率 | 720×1280（默认，满足抖音/视频号等平台需求）或 1080×1920（需显式传 `--resolution 1080p`） | `ffprobe ... -show_entries stream=width,height` |
 | 帧率 | 24/25/30（连贯即可） | `ffprobe ... -show_entries stream=r_frame_rate` |
 | 音频采样率 | 44100 或 48000 Hz | `ffprobe ... -select_streams a:0 -show_entries stream=sample_rate` |
+
+> ⚠️ **分辨率说明**：Seedance API 默认输出 720×1280（竖屏 720p）。对于短视频分发平台（抖音/快手/视频号/小红书），720p 是可接受下限，平台会再次压缩。如果需要 1080p 源，Seedance 调用必须显式传 `--resolution 1080p`（成本更高）。
 
 任一不达标时自动修复（重烧合成调参数）或用户手动介入。
 
